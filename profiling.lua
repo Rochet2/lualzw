@@ -19,8 +19,8 @@ local function profile(input, comp, decomp)
         compressT = compressT + t2-t1
         decompressT = decompressT + t3-t2
     end
-    print(#input, #compressed, #decompressed, #compressed/#input, input == decompressed)
-    print(compressT/timesT, decompressT/timesT)
+    print(#input, #compressed, #decompressed, input == decompressed)
+    print(compressT/timesT, decompressT/timesT, #compressed/#input*100)
 end
 
 math.randomseed(1)
