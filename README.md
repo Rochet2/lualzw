@@ -11,7 +11,7 @@ While compressing, the algorithm checks if the result size gets over the input. 
 ```lua
 local lualzw = require("lualzw")
 
-local input = "foo foo bar foo baz bar bar foo"
+local input = "foofoofoofoofoofoofoofoofoo"
 local compressed = assert(lualzw.compress(input))
 local decompressed = assert(lualzw.decompress(compressed))
 assert(input == decompressed)
