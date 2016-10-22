@@ -2,6 +2,8 @@
 A relatively fast LZW compression algorithm in pure lua
 
 # encoding and decoding
+Lossless compression for any text. The more repetition in the text, the better.
+
 16 bit encoding is used. So each 8 bit character is encoded as 16 bit.
 This means that the dictionary size is 65280.
 
