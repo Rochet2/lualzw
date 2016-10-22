@@ -50,3 +50,6 @@ profile(input3, lualzw.compress, lualzw.decompress)
 
 profile(input4, LibCompress.CompressLZW, LibCompress.DecompressLZW)
 profile(input4, lualzw.compress, lualzw.decompress)
+
+profile(("ymn32h8hm8ekrwjkrn9f"):rep(50000), LibCompress.CompressLZW, LibCompress.DecompressLZW)
+profile(("ymn32h8hm8ekrwjkrn9f"):rep(50000), lualzw.compress, lualzw.decompress)
