@@ -29,11 +29,11 @@ local sub = string.sub
 local tconcat = table.concat
 
 local basedictcompress = {}
-local basedictuncompress = {}
+local basedictdecompress = {}
 for i = 0, 255 do
     local ic, iic = char(i), char(i, 0)
     basedictcompress[ic] = iic
-    basedictuncompress[iic] = ic
+    basedictdecompress[iic] = ic
 end
 
 local function compress(input)
@@ -92,7 +92,7 @@ local function compress(input)
     return tconcat(result)
 end
 
-local function uncompress(input)
+local function decompress(input)
     if type(input) ~= "string" then
         return nil, "string expected, got "..type(input)
     end
@@ -132,15 +132,15 @@ local function uncompress(input)
     local result = {}
     local n = 1
     local last = sub(input, 1, 2)
-    result[n] = basedictuncompress[last] or dict[last]
+    result[n] = basedictdecompress[last] or dict[last]
     n = n+1
     for i = 3, len, 2 do
         code = sub(input, i, i+1)
-        local lastStr = basedictuncompress[last] or dict[last]
+        local lastStr = basedictdecompress[last] or dict[last]
         if not lastStr then
             return nil, "could not find last from dict. Invalid input?"
         end
-        local toAdd = basedictuncompress[code] or dict[code]
+        local toAdd = basedictdecompress[code] or dict[code]
         if toAdd then
             result[n] = toAdd
             n = n+1
@@ -158,5 +158,5 @@ end
 
 return {
     compress = compress,
-    uncompress = uncompress,
+    decompress = decompress,
 }
