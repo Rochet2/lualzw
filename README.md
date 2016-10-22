@@ -54,3 +54,10 @@ algorithm|compress|decompress|result % of input
 ---------|--------|----------|-------------
 lualzw|0.7045|0.0026|0.2829
 LibCompress|0.6418|0.0038|0.4241
+
+Input: "ymn32h8hm8ekrwjkrn9f" repeated 50000 times. In total 1000000 bytes
+
+algorithm|compress|decompress|result % of input
+---------|--------|----------|-------------
+lualzw|0.4788|0.0088|1.2629
+LibCompress|0.4426|0.0093|1.8905
