@@ -48,8 +48,6 @@ local function compress(input)
     local dict = {}
     local a, b = 0, 1
     local function dictAdd(str)
-        dict[str] = char(a,b)
-        a = a+1
         if a >= 256 then
             a, b = 0, b+1
             if b >= 256 then
@@ -57,6 +55,8 @@ local function compress(input)
                 b = 1
             end
         end
+        dict[str] = char(a,b)
+        a = a+1
     end
     
     local result = {"c"}
