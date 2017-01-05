@@ -7,6 +7,8 @@ Lossless compression for any text. The more repetition in the text, the better.
 16 bit encoding is used. So each 8 bit character is encoded as 16 bit.
 This means that the dictionary size is 65280.
 
+Any special characters like `äöå` that are represented with multiple characters are supported. The special characters are split up into single characters that are then encoded and decoded. 
+
 While compressing, the algorithm checks if the result size gets over the input. If it does, then the input is not compressed and the algorithm returns the input prematurely as the compressed result.
 
 # usage
