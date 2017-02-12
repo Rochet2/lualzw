@@ -31,17 +31,17 @@ local tconcat = table.concat
 local basedictcompress = {}
 local basedictdecompress = {}
 for i = 0, 255 do
-    local ic, iic = char(i), char(i, 0)
+    local ic, iic = char(i), char(i, 1)
     basedictcompress[ic] = iic
     basedictdecompress[iic] = ic
 end
 
 local function dictAddA(str, dict, a, b)
     if a >= 256 then
-        a, b = 0, b+1
+        a, b = 1, b+1
         if b >= 256 then
             dict = {}
-            b = 1
+            b = 2
         end
     end
     dict[str] = char(a,b)
@@ -59,7 +59,7 @@ local function compress(input)
     end
 
     local dict = {}
-    local a, b = 0, 1
+    local a, b = 1, 2
 
     local result = {"c"}
     local resultlen = 1
@@ -96,10 +96,10 @@ end
 
 local function dictAddB(str, dict, a, b)
     if a >= 256 then
-        a, b = 0, b+1
+        a, b = 1, b+1
         if b >= 256 then
             dict = {}
-            b = 1
+            b = 2
         end
     end
     dict[char(a,b)] = str
@@ -130,7 +130,7 @@ local function decompress(input)
     end
 
     local dict = {}
-    local a, b = 0, 1
+    local a, b = 1, 2
 
     local result = {}
     local n = 1
