@@ -36,6 +36,19 @@ for i = 0, 255 do
     basedictdecompress[iic] = ic
 end
 
+local function dictAddA(str, dict, a, b)
+    if a >= 256 then
+        a, b = 0, b+1
+        if b >= 256 then
+            dict = {}
+            b = 1
+        end
+    end
+    dict[str] = char(a,b)
+    a = a+1
+    return dict, a, b
+end
+
 local function compress(input)
     if type(input) ~= "string" then
         return nil, "string expected, got "..type(input)
@@ -47,18 +60,7 @@ local function compress(input)
 
     local dict = {}
     local a, b = 0, 1
-    local function dictAdd(str)
-        if a >= 256 then
-            a, b = 0, b+1
-            if b >= 256 then
-                dict = {}
-                b = 1
-            end
-        end
-        dict[str] = char(a,b)
-        a = a+1
-    end
-    
+
     local result = {"c"}
     local resultlen = 1
     local n = 2
@@ -77,7 +79,7 @@ local function compress(input)
             if  len <= resultlen then
                 return "u"..input
             end
-            dictAdd(wc)
+            dict, a, b = dictAddA(wc, dict, a, b)
             word = c
         else
             word = wc
@@ -92,15 +94,28 @@ local function compress(input)
     return tconcat(result)
 end
 
+local function dictAddB(str, dict, a, b)
+    if a >= 256 then
+        a, b = 0, b+1
+        if b >= 256 then
+            dict = {}
+            b = 1
+        end
+    end
+    dict[char(a,b)] = str
+    a = a+1
+    return dict, a, b
+end
+
 local function decompress(input)
     if type(input) ~= "string" then
         return nil, "string expected, got "..type(input)
     end
-    
+
     if #input < 1 then
         return nil, "invalid input - not a compressed string"
     end
-    
+
     local control = sub(input, 1, 1)
     if control == "u" then
         return sub(input, 2)
@@ -115,19 +130,7 @@ local function decompress(input)
     end
 
     local dict = {}
-
     local a, b = 0, 1
-    local function dictAdd(str)
-        if a >= 256 then
-            a, b = 0, b+1
-            if b >= 256 then
-                dict = {}
-                b = 1
-            end
-        end
-        dict[char(a,b)] = str
-        a = a+1
-    end
 
     local result = {}
     local n = 1
@@ -144,12 +147,12 @@ local function decompress(input)
         if toAdd then
             result[n] = toAdd
             n = n+1
-            dictAdd(lastStr..sub(toAdd, 1, 1))
+            dict, a, b = dictAddB(lastStr..sub(toAdd, 1, 1), )
         else
             local tmp = lastStr..sub(lastStr, 1, 1)
             result[n] = tmp
             n = n+1
-            dictAdd(tmp)
+            dict, a, b = dictAddB(tmp, dict, a, b)
         end
         last = code
     end
