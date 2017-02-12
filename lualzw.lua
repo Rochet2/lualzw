@@ -147,7 +147,7 @@ local function decompress(input)
         if toAdd then
             result[n] = toAdd
             n = n+1
-            dict, a, b = dictAddB(lastStr..sub(toAdd, 1, 1), )
+            dict, a, b = dictAddB(lastStr..sub(toAdd, 1, 1), dict, a, b)
         else
             local tmp = lastStr..sub(lastStr, 1, 1)
             result[n] = tmp
