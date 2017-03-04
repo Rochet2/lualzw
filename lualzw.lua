@@ -138,7 +138,7 @@ local function decompress(input)
     result[n] = basedictdecompress[last] or dict[last]
     n = n+1
     for i = 3, len, 2 do
-        code = sub(input, i, i+1)
+        local code = sub(input, i, i+1)
         local lastStr = basedictdecompress[last] or dict[last]
         if not lastStr then
             return nil, "could not find last from dict. Invalid input?"

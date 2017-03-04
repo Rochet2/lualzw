@@ -11,6 +11,8 @@ Any special characters like `äöå` that are represented with multiple characte
 
 While compressing, the algorithm checks if the result size gets over the input. If it does, then the input is not compressed and the algorithm returns the input prematurely as the compressed result.
 
+The `zeros` branch contains a version that does not add additional null `\0` characters to the input when encoding. Any existing null characters in input string are preserved as nulls however so make sure your input does not contain nulls.
+
 # usage
 ```lua
 local lualzw = require("lualzw")
