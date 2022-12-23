@@ -28,24 +28,44 @@ local select = select
 local sub = string.sub
 local tconcat = table.concat
 
+-- Define characters to skip here by their character code
+local skippedcharacters = {
+    [0] = true, -- skip null character
+}
+
+local function findNextNotSkipped(i)
+    repeat
+        if not skippedcharacters[i] then
+            return i
+        end
+        i = i+1
+    until false
+end
+
 local basedictcompress = {}
 local basedictdecompress = {}
+
+local firstNotSkipped = findNextNotSkipped(0)
+local secondNotSkipped = findNextNotSkipped(firstNotSkipped+1)
+if firstNotSkipped > 255 or secondNotSkipped > 255 or firstNotSkipped == secondNotSkipped then
+    error("invalid configuration, no character can be used in compression")
+end
 for i = 0, 255 do
-    local ic, iic = char(i), char(i, 1)
+    local ic, iic = char(i), char(i, firstNotSkipped)
     basedictcompress[ic] = iic
     basedictdecompress[iic] = ic
 end
 
 local function dictAddA(str, dict, a, b)
     if a >= 256 then
-        a, b = 1, b+1
+        a, b = firstNotSkipped, findNextNotSkipped(b+1)
         if b >= 256 then
             dict = {}
-            b = 2
+            b = secondNotSkipped
         end
     end
     dict[str] = char(a,b)
-    a = a+1
+    a = findNextNotSkipped(a+1)
     return dict, a, b
 end
 
@@ -59,7 +79,7 @@ local function compress(input)
     end
 
     local dict = {}
-    local a, b = 1, 2
+    local a, b = firstNotSkipped, secondNotSkipped
 
     local result = {"c"}
     local resultlen = 1
@@ -96,14 +116,14 @@ end
 
 local function dictAddB(str, dict, a, b)
     if a >= 256 then
-        a, b = 1, b+1
+        a, b = firstNotSkipped, findNextNotSkipped(b+1)
         if b >= 256 then
             dict = {}
-            b = 2
+            b = secondNotSkipped
         end
     end
     dict[char(a,b)] = str
-    a = a+1
+    a = findNextNotSkipped(a+1)
     return dict, a, b
 end
 
@@ -130,7 +150,7 @@ local function decompress(input)
     end
 
     local dict = {}
-    local a, b = 1, 2
+    local a, b = firstNotSkipped, secondNotSkipped
 
     local result = {}
     local n = 1
