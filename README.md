@@ -1,193 +1,19 @@
 # lualzw
-A relatively fast LZW compression algorithm in pure lua
 
-# encoding and decoding
-Lossless compression for any text. The more repetition in the text, the better.
+A relatively fast LZW compression algorithm in pure Lua.
 
-16 bit encoding is used. So each 8 bit character is encoded as 16 bit.
-This means that the dictionary size is 65280.
+## Overview
 
-Any special characters like `äöå` that are represented with multiple characters are supported. The special characters are split up into single characters that are then encoded and decoded. 
+Lossless compression for byte strings. The more repetition in the data, the better the ratio.
 
-While compressing, the algorithm checks if the result size gets over the input. If it does, then the input is not compressed and the algorithm returns the input prematurely as the compressed result (see [Wire format](#wire-format)).
+The library uses 16-bit dictionary codes (two bytes per code). The maximum dictionary size per level is 65280 codes.
 
-## Skipped bytes in compressed output
+Input is processed as a sequence of **bytes** (Lua `string` semantics). UTF-8 text round-trips correctly because multibyte sequences are compressed as individual bytes, not as Unicode code points.
 
-Dictionary codes are 16-bit pairs of bytes. By default, those code bytes may include `\0` (null). That matches the original encoding and gives the smallest dictionary overhead, but compressed strings can be truncated by null-terminated APIs (C strings, some database bindings, etc.).
+While compressing, the algorithm checks whether the result would be strictly smaller than the input. If not, it returns an uncompressed passthrough instead (see [Wire format](#wire-format)).
 
-You can exclude specific byte values from appearing anywhere in compressed output by editing the `skippedcharacters` table near the top of `lualzw.lua`. Compressor and decompressor must use the same setting.
+## Quick start
 
-### Skipping null bytes (`\0`)
-
-To ensure compressed output never contains embedded null bytes, set:
-
-```lua
-local skippedcharacters = {
-    [0] = true,
-}
-```
-
-Both ends of your pipeline must use this configuration before compressing or decompressing. Data compressed with the default `{}` setting cannot be decoded correctly after you enable null skipping, and vice versa.
-
-Null bytes that were already in the **input** string are still preserved when you decompress. Avoid nulls in input unless you control both ends.
-
-### Other configurations
-
-Default (original encoding):
-
-```lua
-local skippedcharacters = {
-}
-```
-
-Skip multiple code bytes (neither `\0` nor `\1` will appear in codes):
-
-```lua
-local skippedcharacters = {
-    [0] = true,
-    [1] = true,
-}
-```
-
-| Configuration | Effect |
-|---------------|--------|
-| `{}` (default) | Original encoding; codes may contain `\0` |
-| `{ [0] = true }` | No `\0` in compressed output |
-| `{ [0] = true, [1] = true }` | No `\0` or `\1` in compressed output |
-
-Each skipped byte slightly reduces the number of available dictionary codes.
-
-## API
-
-Load the module:
-
-```lua
-local lualzw = require("lualzw")
-```
-
-The module returns a table with two functions: `compress` and `decompress`.
-
-### `lualzw.compress(input)`
-
-Compresses a string using LZW.
-
-**Parameters**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `input` | `string` | Data to compress |
-
-**Returns**
-
-On success, returns the compressed string (one value).
-
-On failure, returns `nil` and an error message (two values).
-
-**Behavior**
-
-- Input must be a string. Otherwise returns `nil, "string expected, got <type>"`.
-- Input of 0 or 1 byte is never LZW-compressed; returns `"u" .. input` (see [Wire format](#wire-format)).
-- For longer input, compresses with LZW. If the compressed size would not be smaller than the input, returns `"u" .. input` instead (not an error).
-- On rare internal failure: `nil, "algorithm error, could not fetch word"`.
-
-```lua
-local compressed, err = lualzw.compress("hello hello hello")
-if not compressed then
-    error(err)
-end
-```
-
-### `lualzw.decompress(input[, max_output_size])`
-
-Decompresses a string previously produced by `compress`, or returns passthrough data unchanged.
-
-**Parameters**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `input` | `string` | Compressed or passthrough string |
-| `max_output_size` | `number` (optional) | Maximum allowed decompressed length in bytes |
-
-**Returns**
-
-On success, returns the original string (one value).
-
-On failure, returns `nil` and an error message (two values).
-
-**Behavior**
-
-- Input must be a string. Otherwise returns `nil, "string expected, got <type>"`.
-- If `max_output_size` is provided, it must be a non-negative number.
-- Empty string: `nil, "invalid input - not a compressed string"`.
-- Strings starting with `u`: returns everything after the prefix (passthrough from `compress`).
-- Strings starting with `c`: LZW-decompresses the remainder.
-- Any other prefix, truncated compressed data, or corrupt codes: `nil` and an error message.
-- If decompressed output would exceed `max_output_size`: `nil, "decompressed output exceeds limit"`.
-
-```lua
-local original, err = lualzw.decompress(compressed, 1024 * 1024)
-if not original then
-    error(err)
-end
-```
-
-### Wire format
-
-Every value returned by `compress` starts with a one-byte prefix:
-
-| Prefix | Meaning | Body |
-|--------|---------|------|
-| `u` | Uncompressed passthrough | Original input bytes |
-| `c` | LZW compressed | Pairs of code bytes (16-bit codes) |
-
-Examples:
-
-| Input to `compress` | Output |
-|---------------------|--------|
-| `""` | `"u"` |
-| `"a"` | `"ua"` |
-| Long repetitive text | `"c" .. <code pairs>` (if smaller than input) |
-| Incompressible data | `"u" .. input` |
-
-`decompress` accepts any string in this format and round-trips with `compress`:
-
-```lua
-assert(lualzw.decompress(lualzw.compress(input)) == input)
-```
-
-### Configuration
-
-There is no runtime options table. Edit `skippedcharacters` at the top of `lualzw.lua` before loading the module (see [Skipped bytes](#skipped-bytes-in-compressed-output)). Both `compress` and `decompress` use the same setting.
-
-If too many bytes are marked as skipped, the module fails at load time with:
-
-```
-invalid configuration, no character can be used in compression
-```
-
-### Error messages
-
-| Function | Condition | Second return value |
-|----------|-----------|---------------------|
-| `compress` | Wrong argument type | `"string expected, got <type>"` |
-| `compress` | Internal error | `"algorithm error, could not fetch word"` |
-| `decompress` | Wrong argument type | `"string expected, got <type>"` |
-| `decompress` | Invalid `max_output_size` type | `"number expected for max_output_size, got <type>"` |
-| `decompress` | Empty input | `"invalid input - not a compressed string"` |
-| `decompress` | Missing or wrong prefix | `"invalid input - not a compressed string"` |
-| `decompress` | Corrupt compressed body | `"could not find last from dict. Invalid input?"` |
-| `decompress` | Output exceeds `max_output_size` | `"decompressed output exceeds limit"` |
-
-Use multiple assignment to detect errors:
-
-```lua
-local result, err = lualzw.compress(data)
-if not result then
-    -- handle err
-end
-```
-
-## Usage
 ```lua
 local lualzw = require("lualzw")
 
@@ -197,84 +23,192 @@ local decompressed = assert(lualzw.decompress(compressed))
 assert(input == decompressed)
 ```
 
-## Tests
+## Client–server use
 
-From the repository root (requires Lua 5.1 or later):
+For network IO, **always bound decompression** and prefer the network preset:
+
+```lua
+local lualzw = require("lualzw").network()
+local MAX = 64 * 1024
+
+-- receive exactly `len` bytes from your framing layer, then:
+local data, err = lualzw.decompress(payload, MAX, len, MAX * 4)
+if not data then
+    error(err)
+end
+```
+
+See [SECURITY.md](SECURITY.md) for limit guidance.
+
+### `lualzw.network()`
+
+Returns a codec configured for IO with `{ skip = { [0] = true } }` so dictionary codes never contain `\0`.
+
+Both peers must use the same `configure()` / `network()` settings (skip list and control characters).
+
+## Configuration
+
+```lua
+local lualzw = require("lualzw")
+
+-- Original encoding (default): may embed \0 in codes
+local legacy = lualzw.configure({ skip = {} })
+
+-- Null-safe codes
+local nullsafe = lualzw.configure({ skip = { [0] = true } })
+
+-- Custom wire prefixes (both peers must match)
+local custom = lualzw.configure({
+    skip = { [0] = true },
+    uncompressed = "p",
+    compressed = "q",
+})
+```
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `skip` | `{}` | Byte values `0`–`255` that must not appear in dictionary codes |
+| `uncompressed` | `"u"` | One-byte prefix for passthrough payloads |
+| `compressed` | `"c"` | One-byte prefix for LZW payloads |
+
+`uncompressed` and `compressed` must be different single-byte strings. Each codec exposes the resolved values as `.uncompressed` and `.compressed`.
+
+## API
+
+Load the module:
+
+```lua
+local lualzw = require("lualzw")
+print(lualzw._VERSION) -- "1.1.0"
+```
+
+Each codec table (default, or from `configure()` / `network()`) exports:
+
+| Member | Description |
+| ------ | ----------- |
+| `compress(input[, max_input_size])` | Compress a string |
+| `decompress(input[, max_output_size[, max_input_size[, max_codes]]])` | Decompress or passthrough |
+| `configure(options)` | Create a new codec with options |
+| `network()` | Shorthand for `{ skip = { [0] = true } }` |
+| `_VERSION` | Semantic version string |
+| `uncompressed` | Passthrough prefix byte for this codec |
+| `compressed` | Compressed prefix byte for this codec |
+
+### `compress(input[, max_input_size])`
+
+**Returns:** compressed string, or `nil, error`.
+
+- Non-string input → `nil, "string expected, got <type>"`
+- Input longer than `max_input_size` → `nil, "input exceeds limit"`
+- Input of 0–1 bytes → passthrough (`u` prefix; see wire format)
+- Longer input → LZW compress if strictly smaller than input, otherwise passthrough
+- Internal failure → `nil, "algorithm error, could not fetch word"`
+
+### `decompress(input[, max_output_size[, max_input_size[, max_codes]]])`
+
+**Returns:** original string, or `nil, error`.
+
+Always pass limits when decoding **untrusted** data (see [SECURITY.md](SECURITY.md)).
+
+- Non-string input → `nil, "string expected, got <type>"`
+- Invalid limit types → `nil, "number expected for <name>, got <type>"`
+- `#input` or body larger than `max_input_size` → `nil, "compressed input exceeds limit"`
+- Decompressed size exceeds `max_output_size` → `nil, "decompressed output exceeds limit"`
+- Dictionary growth exceeds `max_codes` → `nil, "decompression step limit exceeded"`
+- Invalid or corrupt payload → `nil, "invalid input - not a compressed string"` or `"could not find last from dict. Invalid input?"`
+
+## Wire format
+
+Each output starts with a one-byte control prefix configured on the codec (defaults shown):
+
+| Prefix | Meaning | Body |
+| ------ | ------- | ---- |
+| `u` (default) | Uncompressed passthrough | Original bytes |
+| `c` (default) | LZW compressed | Pairs of code bytes |
+
+Examples with default controls:
+
+| Input to `compress` | Output |
+| ------------------- | ------ |
+| `""` | `"u"` |
+| `"a"` | `"ua"` |
+| Repetitive data | `"c" .. <code pairs>` if smaller than input |
+| Incompressible data | `"u" .. input` |
+
+## Tests
 
 ```sh
 lua spec/test.lua
 ```
 
-Install via LuaRocks for local development:
+## Benchmarks
+
+Historical timings below were produced with `benchmark/profiling.lua`, which compares lualzw to [LibCompress](https://www.curseforge.com/wow/addons/libcompress). LibCompress is not bundled with this repo.
+
+From the repository root:
 
 ```sh
-luarocks make lualzw-dev-1.rockspec
+lua benchmark/profiling.lua
 ```
 
-CI runs the same test suite on Lua 5.1–5.4 and LuaJIT.
-
-## Speed
-
-Times are in seconds. Both algorithms use the same generated input. Values are an average of 10 runs from `profiling.lua`.
-
-### Reproducing benchmarks
-
-`profiling.lua` compares lualzw to [LibCompress](https://www.curseforge.com/wow/addons/libcompress) (the WoW addon library used in the original benchmarks). LibCompress is not bundled with this repo.
-
-1. Install Lua 5.1 or later.
-2. Clone this repository and [LibCompress](https://www.curseforge.com/wow/addons/libcompress/files) (or copy `LibCompress.lua` onto your path).
-3. Set `LUA_PATH` so both libraries can be required. Example on Unix:
+Use `--quick` for smaller inputs (10 000 bytes, 3 iterations):
 
 ```sh
-export LUA_PATH="./?.lua;/path/to/LibCompress/?.lua;;"
-lua profiling.lua
+lua benchmark/profiling.lua --quick
 ```
 
-On Windows (PowerShell):
+Each case runs the default and network codecs. LibCompress is compared when installed.
 
-```powershell
-$env:LUA_PATH = ".\\?.lua;C:\\path\\to\\LibCompress\\?.lua;;"
-lua profiling.lua
-```
+### Published results
 
-Each block of output prints: input size, compressed size, decompressed size, round-trip OK, then average compress time, average decompress time, and compressed size as a percentage of input.
+Times are in seconds (average of 10 runs). Random inputs usually bail out to passthrough (100% of input size).
 
-Note that compressing random generated inputs results usually in bigger result than original. In these cases the algorithms do not compress and return input instead and thus compression result is 100% of input.
+**Input:** 1 000 000 random bytes
 
-lualzw is at an advantage in cases where compression cannot be done as it stops prematurely and LibCompress does not.
-Also lualzw is at an advantage in cases where compression can be done as it has a larger dictionary in use.
+| algorithm | compress | decompress | result % |
+| --------- | -------- | ---------- | -------- |
+| lualzw | 0.6622 | 0.0003 | 100 |
+| LibCompress | 2.1983 | 0.0024 | 100 |
 
-Input: 1000000 random generated bytes converted into string
+**Input:** 1 000 000 random ASCII bytes
 
-algorithm|compress|decompress|result % of input
----------|--------|----------|-------------
-lualzw|0.6622|0.0003|100
-LibCompress|2.1983|0.0024|100
+| algorithm | compress | decompress | result % |
+| --------- | -------- | ---------- | -------- |
+| lualzw | 0.812 | 0.0022 | 100 |
+| LibCompress | 1.782 | 0.0007 | 100 |
 
-Input: 1000000 random generated bytes in ASCII range converted into string
+**Input:** 1 000 000 repeating cycling bytes
 
-algorithm|compress|decompress|result % of input
----------|--------|----------|-------------
-lualzw|0.812|0.0022|100
-LibCompress|1.782|0.0007|100
+| algorithm | compress | decompress | result % |
+| --------- | -------- | ---------- | -------- |
+| lualzw | 0.3975 | 0.0262 | 4.5001 |
+| LibCompress | 0.3907 | 0.0264 | 6.6997 |
 
-Input: 1000000 random generated repeating bytes converted into string
+**Input:** 1 000 000 identical bytes
 
-algorithm|compress|decompress|result % of input
----------|--------|----------|-------------
-lualzw|0.3975|0.0262|4.5001
-LibCompress|0.3907|0.0264|6.6997
+| algorithm | compress | decompress | result % |
+| --------- | -------- | ---------- | -------- |
+| lualzw | 0.7045 | 0.0026 | 0.2829 |
+| LibCompress | 0.6418 | 0.0038 | 0.4241 |
 
-Input: 1000000 of same character
+**Input:** `"ymn32h8hm8ekrwjkrn9f"` × 50 000 (1 000 000 bytes)
 
-algorithm|compress|decompress|result % of input
----------|--------|----------|-------------
-lualzw|0.7045|0.0026|0.2829
-LibCompress|0.6418|0.0038|0.4241
+| algorithm | compress | decompress | result % |
+| --------- | -------- | ---------- | -------- |
+| lualzw | 0.4788 | 0.0088 | 1.2629 |
+| LibCompress | 0.4426 | 0.0093 | 1.8905 |
 
-Input: "ymn32h8hm8ekrwjkrn9f" repeated 50000 times. In total 1000000 bytes
+## Error reference
 
-algorithm|compress|decompress|result % of input
----------|--------|----------|-------------
-lualzw|0.4788|0.0088|1.2629
-LibCompress|0.4426|0.0093|1.8905
+| Function | Condition | Error |
+| -------- | --------- | ----- |
+| `compress` | Wrong type | `"string expected, got <type>"` |
+| `compress` | Input too large | `"input exceeds limit"` |
+| `compress` | Internal | `"algorithm error, could not fetch word"` |
+| `decompress` | Wrong type | `"string expected, got <type>"` |
+| `decompress` | Bad limit type | `"number expected for <name>, got <type>"` |
+| `decompress` | Empty / invalid | `"invalid input - not a compressed string"` |
+| `decompress` | Corrupt codes | `"could not find last from dict. Invalid input?"` |
+| `decompress` | Output limit | `"decompressed output exceeds limit"` |
+| `decompress` | Input limit | `"compressed input exceeds limit"` |
+| `decompress` | Step limit | `"decompression step limit exceeded"` |
