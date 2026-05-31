@@ -101,7 +101,7 @@ print(string.format(
 
 local codecs = {
     { label = "default", codec = lualzw },
-    { label = "network", codec = lualzw.network() },
+    { label = "nullsafe", codec = lualzw.configure({ skip = { [0] = true } }) },
 }
 
 for _, case in ipairs(cases) do

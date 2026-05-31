@@ -317,9 +317,6 @@ local function createCodec(options)
         compress = compress,
         decompress = decompress,
         configure = createCodec,
-        network = function()
-            return createCodec({skip = {[0] = true}})
-        end,
         _VERSION = VERSION,
         uncompressed = uncompressedControl,
         compressed = compressedControl,

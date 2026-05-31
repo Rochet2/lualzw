@@ -10,13 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Runtime configuration via `lualzw.configure({ skip = ..., uncompressed = ..., compressed = ... })`
-- `lualzw.network()` preset for client–server use (null-safe codes)
 - Configurable passthrough / compressed control prefixes (default `u` / `c`)
 - Optional limits: `compress(input, max_input_size)` and `decompress(input, max_output_size, max_input_size, max_codes)`
 - Module version export: `lualzw._VERSION`, `lualzw.uncompressed`, `lualzw.compressed`
 - Automated test suite (`spec/test.lua`)
 - LuaRocks rockspec, GitHub Actions CI, Luacheck linting
-- `CHANGELOG.md`, `SECURITY.md`, `.editorconfig`
+- `CHANGELOG.md`, `.editorconfig`
 
 ### Changed
 
@@ -28,7 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- LICENSE copyright line matches source file (`Rochet2`)
 - `profiling.lua` no longer assigns globals for compressed/decompressed results
 
 ## [1.0.0] - 2016

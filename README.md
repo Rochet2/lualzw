@@ -23,41 +23,33 @@ local decompressed = assert(lualzw.decompress(compressed))
 assert(input == decompressed)
 ```
 
-## Client–server use
-
-For network IO, **always bound decompression** and prefer the network preset:
-
-```lua
-local lualzw = require("lualzw").network()
-local MAX = 64 * 1024
-
--- receive exactly `len` bytes from your framing layer, then:
-local data, err = lualzw.decompress(payload, MAX, len, MAX * 4)
-if not data then
-    error(err)
-end
-```
-
-See [SECURITY.md](SECURITY.md) for limit guidance.
-
-### `lualzw.network()`
-
-Returns a codec configured for IO with `{ skip = { [0] = true } }` so dictionary codes never contain `\0`.
-
-Both peers must use the same `configure()` / `network()` settings (skip list and control characters).
-
 ## Configuration
+
+Create a custom codec with `configure()`. The default module (`require("lualzw")`) uses `skip = {}` and control prefixes `u` / `c`.
 
 ```lua
 local lualzw = require("lualzw")
 
--- Original encoding (default): may embed \0 in codes
+-- Default: original encoding (may embed \0 in dictionary codes)
 local legacy = lualzw.configure({ skip = {} })
 
--- Null-safe codes
+-- Preferred when compressed data must not contain \0
 local nullsafe = lualzw.configure({ skip = { [0] = true } })
+```
 
--- Custom wire prefixes (both peers must match)
+### Skipping null bytes in codes
+
+The default skip list `{}` matches the original on-the-wire encoding. Dictionary codes are 16-bit byte pairs and **may include `\0`**. That is fine for plain Lua strings, but problematic when compressed data passes through:
+
+- C APIs or bindings that treat `\0` as end-of-string
+- Null-terminated storage or logging
+- Tools that truncate at the first null
+
+Use `{ skip = { [0] = true } }` when compressed output must be binary-safe. Both compressor and decompressor need the same `skip` setting; it is not stored in the payload.
+
+Custom control prefixes (both peers must match):
+
+```lua
 local custom = lualzw.configure({
     skip = { [0] = true },
     uncompressed = "p",
@@ -65,13 +57,33 @@ local custom = lualzw.configure({
 })
 ```
 
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `skip` | `{}` | Byte values `0`–`255` that must not appear in dictionary codes |
-| `uncompressed` | `"u"` | One-byte prefix for passthrough payloads |
-| `compressed` | `"c"` | One-byte prefix for LZW payloads |
+See [`configure(options)`](#configureoptions) for full option details.
 
-`uncompressed` and `compressed` must be different single-byte strings. Each codec exposes the resolved values as `.uncompressed` and `.compressed`.
+## Untrusted input
+
+lualzw is a **compression codec**, not encryption or authentication. Treat compressed data from untrusted sources as hostile.
+
+Always call `decompress` with explicit limits:
+
+```lua
+local MAX = 64 * 1024
+local data, err = lualzw.decompress(payload, MAX, MAX * 2, MAX * 4)
+if not data then
+    -- reject message
+end
+```
+
+| Limit | Parameter | Protects against |
+| ----- | --------- | ---------------- |
+| Output size | `max_output_size` | Decompression bombs (huge expanded output) |
+| Input size | `max_input_size` | Large compressed blobs (memory / bandwidth) |
+| Dictionary steps | `max_codes` | CPU exhaustion during decode |
+
+Bound `compress` on public endpoints as well:
+
+```lua
+local compressed, err = lualzw.compress(plaintext, MAX)
+```
 
 ## API
 
@@ -82,17 +94,70 @@ local lualzw = require("lualzw")
 print(lualzw._VERSION) -- "1.1.0"
 ```
 
-Each codec table (default, or from `configure()` / `network()`) exports:
+Each codec table (default, or from `configure()`) exports:
 
 | Member | Description |
 | ------ | ----------- |
 | `compress(input[, max_input_size])` | Compress a string |
 | `decompress(input[, max_output_size[, max_input_size[, max_codes]]])` | Decompress or passthrough |
-| `configure(options)` | Create a new codec with options |
-| `network()` | Shorthand for `{ skip = { [0] = true } }` |
+| `configure(options)` | Create a new codec; see [`configure(options)`](#configureoptions) |
 | `_VERSION` | Semantic version string |
 | `uncompressed` | Passthrough prefix byte for this codec |
 | `compressed` | Compressed prefix byte for this codec |
+
+### `configure(options)`
+
+Returns a **new codec table** with the same methods as the default module, using the given options. Options are fixed for the lifetime of that codec; they are not stored in compressed output, so both peers must use matching settings.
+
+**Parameters**
+
+| Name | Type | Default | Description |
+| ---- | ---- | ------- | ----------- |
+| `options` | `table` | `{}` | Configuration (all keys optional) |
+| `options.skip` | `table` | `{}` | Byte values that must not appear in dictionary codes (see below) |
+| `options.uncompressed` | `string` | `"u"` | One-byte prefix for passthrough output |
+| `options.compressed` | `string` | `"c"` | One-byte prefix for LZW output |
+
+**Returns**
+
+A codec table with `compress`, `decompress`, `configure`, `_VERSION`, `uncompressed`, and `compressed`.
+
+**`options.skip`**
+
+Dictionary codes are 16-bit byte pairs. Skipped bytes never appear in those pairs (useful to keep compressed data free of `\0`, etc.).
+
+Two table forms are accepted:
+
+```lua
+-- Map form
+{ [0] = true, [1] = true }
+
+-- List form (byte values as array entries)
+{ 0, 1 }
+```
+
+Each skipped byte slightly reduces available dictionary codes. If too many bytes are skipped, `configure()` raises:
+
+```
+invalid configuration, no character can be used in compression
+```
+
+**`options.uncompressed` / `options.compressed`**
+
+- Each must be a string of **exactly one byte**.
+- They must be **different** from each other.
+- Invalid values raise `invalid uncompressed control character`, `invalid compressed control character`, or `uncompressed and compressed control characters must differ`.
+
+Changing skip or control settings produces incompatible compressed data. Default `{}` skip matches the original master encoding.
+
+```lua
+local codec = lualzw.configure({
+    skip = { [0] = true },
+    uncompressed = "u",
+    compressed = "c",
+})
+print(codec.uncompressed, codec.compressed) -- u    c
+```
 
 ### `compress(input[, max_input_size])`
 
@@ -108,7 +173,7 @@ Each codec table (default, or from `configure()` / `network()`) exports:
 
 **Returns:** original string, or `nil, error`.
 
-Always pass limits when decoding **untrusted** data (see [SECURITY.md](SECURITY.md)).
+Always pass limits when decoding **untrusted** data (see [Untrusted input](#untrusted-input)).
 
 - Non-string input → `nil, "string expected, got <type>"`
 - Invalid limit types → `nil, "number expected for <name>, got <type>"`
@@ -157,7 +222,7 @@ Use `--quick` for smaller inputs (10 000 bytes, 3 iterations):
 lua benchmark/profiling.lua --quick
 ```
 
-Each case runs the default and network codecs. LibCompress is compared when installed.
+Each case runs the default and null-safe (`skip = { [0] = true }`) codecs. LibCompress is compared when installed.
 
 ### Published results
 
