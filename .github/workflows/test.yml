@@ -1,0 +1,52 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        luaVersion: ["5.1", "5.2", "5.3", "5.4", "luajit"]
+    name: Lua ${{ matrix.luaVersion }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v12
+        with:
+          luaVersion: ${{ matrix.luaVersion }}
+
+      - name: Run tests
+        run: lua spec/test.lua
+
+      - name: Quick benchmark smoke
+        run: lua benchmark/profiling.lua --quick
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v12
+        with:
+          luaVersion: "5.4"
+
+      - name: Setup LuaRocks
+        uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install Luacheck
+        run: luarocks install luacheck
+
+      - name: Run Luacheck
+        run: luacheck lualzw.lua spec/test.lua benchmark/profiling.lua
