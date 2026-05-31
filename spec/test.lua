@@ -144,7 +144,10 @@ test("decompress invalid input", function()
 end)
 
 test("decompress odd-length compressed body", function()
-    assert_error(function() return lualzw.decompress("c" .. string.char(0, 1, 2)) end, "invalid input - not a compressed string")
+    assert_error(
+        function() return lualzw.decompress("c" .. string.char(0, 1, 2)) end,
+        "invalid input - not a compressed string"
+    )
 end)
 
 test("decompress corrupt compressed data", function()
@@ -172,7 +175,10 @@ test("decompress passthrough max_output_size limit", function()
 end)
 
 test("decompress max_output_size type error", function()
-    assert_error(function() return lualzw.decompress("ua", "nope") end, "number expected for max_output_size, got string")
+    assert_error(
+        function() return lualzw.decompress("ua", "nope") end,
+        "number expected for max_output_size, got string"
+    )
 end)
 
 test("decompress max_input_size limit", function()
@@ -182,7 +188,10 @@ test("decompress max_input_size limit", function()
 end)
 
 test("decompress max_input_size type error", function()
-    assert_error(function() return lualzw.decompress("ua", nil, "nope") end, "number expected for max_input_size, got string")
+    assert_error(
+        function() return lualzw.decompress("ua", nil, "nope") end,
+        "number expected for max_input_size, got string"
+    )
 end)
 
 test("decompress max_codes limit", function()
@@ -195,7 +204,10 @@ test("decompress max_codes limit", function()
 end)
 
 test("decompress max_codes type error", function()
-    assert_error(function() return lualzw.decompress("ua", nil, nil, "nope") end, "number expected for max_codes, got string")
+    assert_error(
+        function() return lualzw.decompress("ua", nil, nil, "nope") end,
+        "number expected for max_codes, got string"
+    )
 end)
 
 -- configuration and wire formats
