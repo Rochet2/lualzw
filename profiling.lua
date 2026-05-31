@@ -1,4 +1,5 @@
--- Contains some of the profiling code
+-- Benchmark lualzw against LibCompress.
+-- Requires Lua 5.1+ and LibCompress on LUA_PATH (see README "Reproducing benchmarks").
 
 local lualzw = require("lualzw")
 local LibCompress = require("LibCompress")
@@ -8,19 +9,19 @@ local function profile(input, comp, decomp)
     local compressT = 0
     local decompressT = 0
     local timesT = 10
-    local x, dec
-    local t1,t2,t3
+    local compressed, decompressed
+    local t1, t2, t3
     for i = 1, timesT do
         t1 = os.clock()
         compressed = comp(input)
         t2 = os.clock()
         decompressed = decomp(compressed)
         t3 = os.clock()
-        compressT = compressT + t2-t1
-        decompressT = decompressT + t3-t2
+        compressT = compressT + t2 - t1
+        decompressT = decompressT + t3 - t2
     end
     print(#input, #compressed, #decompressed, input == decompressed)
-    print(compressT/timesT, decompressT/timesT, #compressed/#input*100)
+    print(compressT / timesT, decompressT / timesT, #compressed / #input * 100)
 end
 
 math.randomseed(1)
@@ -31,7 +32,7 @@ local input4 = {}
 for i = 1, 1000000 do
     input1[i] = char(math.random(0, 255))
     input2[i] = char(math.random(0, 127))
-    input3[i] = char(i%256)
+    input3[i] = char(i % 256)
     input4[i] = char(100)
 end
 input1 = table.concat(input1)

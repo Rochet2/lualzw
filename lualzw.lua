@@ -24,29 +24,50 @@ SOFTWARE.
 
 local char = string.char
 local type = type
-local select = select
 local sub = string.sub
 local tconcat = table.concat
 
+-- Byte values that must not appear in compressed output (0-255).
+-- Default matches the original encoding (codes may contain \0).
+-- Add [0] = true to avoid null bytes in compressed output.
+-- Each skipped byte reduces the number of available dictionary codes.
+local skippedcharacters = {
+}
+
+local function findNextNotSkipped(i)
+    repeat
+        if not skippedcharacters[i] then
+            return i
+        end
+        i = i+1
+    until false
+end
+
 local basedictcompress = {}
 local basedictdecompress = {}
+
+local firstNotSkipped = findNextNotSkipped(0)
+local secondNotSkipped = findNextNotSkipped(firstNotSkipped+1)
+if firstNotSkipped > 255 or secondNotSkipped > 255 or firstNotSkipped == secondNotSkipped then
+    error("invalid configuration, no character can be used in compression")
+end
 for i = 0, 255 do
-    local ic, iic = char(i), char(i, 0)
+    local ic, iic = char(i), char(i, firstNotSkipped)
     basedictcompress[ic] = iic
     basedictdecompress[iic] = ic
 end
 
-local function dictAddA(str, dict, a, b)
+local function dictBump(dict, a, b)
     if a >= 256 then
-        a, b = 0, b+1
+        a, b = firstNotSkipped, findNextNotSkipped(b+1)
         if b >= 256 then
             dict = {}
-            b = 1
+            b = secondNotSkipped
         end
     end
-    dict[str] = char(a,b)
-    a = a+1
-    return dict, a, b
+    local code = char(a, b)
+    a = findNextNotSkipped(a+1)
+    return dict, a, b, code
 end
 
 local function compress(input)
@@ -59,7 +80,8 @@ local function compress(input)
     end
 
     local dict = {}
-    local a, b = 0, 1
+    local a, b = firstNotSkipped, secondNotSkipped
+    local code
 
     local result = {"c"}
     local resultlen = 1
@@ -74,42 +96,36 @@ local function compress(input)
                 return nil, "algorithm error, could not fetch word"
             end
             result[n] = write
-            resultlen = resultlen + #write
+            resultlen = resultlen + 2
             n = n+1
-            if  len <= resultlen then
+            if len < resultlen then
                 return "u"..input
             end
-            dict, a, b = dictAddA(wc, dict, a, b)
+            dict, a, b, code = dictBump(dict, a, b)
+            dict[wc] = code
             word = c
         else
             word = wc
         end
     end
     result[n] = basedictcompress[word] or dict[word]
-    resultlen = resultlen+#result[n]
+    resultlen = resultlen + 2
     n = n+1
-    if  len <= resultlen then
+    if len < resultlen then
         return "u"..input
     end
     return tconcat(result)
 end
 
-local function dictAddB(str, dict, a, b)
-    if a >= 256 then
-        a, b = 0, b+1
-        if b >= 256 then
-            dict = {}
-            b = 1
-        end
-    end
-    dict[char(a,b)] = str
-    a = a+1
-    return dict, a, b
-end
-
-local function decompress(input)
+local function decompress(input, max_output_size)
     if type(input) ~= "string" then
         return nil, "string expected, got "..type(input)
+    end
+
+    if max_output_size ~= nil then
+        if type(max_output_size) ~= "number" or max_output_size < 0 then
+            return nil, "number expected for max_output_size, got "..type(max_output_size)
+        end
     end
 
     if #input < 1 then
@@ -118,43 +134,67 @@ local function decompress(input)
 
     local control = sub(input, 1, 1)
     if control == "u" then
-        return sub(input, 2)
+        local out = sub(input, 2)
+        if max_output_size and #out > max_output_size then
+            return nil, "decompressed output exceeds limit"
+        end
+        return out
     elseif control ~= "c" then
         return nil, "invalid input - not a compressed string"
     end
     input = sub(input, 2)
     local len = #input
 
-    if len < 2 then
+    if len < 2 or len % 2 == 1 then
         return nil, "invalid input - not a compressed string"
     end
 
     local dict = {}
-    local a, b = 0, 1
+    local a, b = firstNotSkipped, secondNotSkipped
+    local dictCode
 
     local result = {}
     local n = 1
+    local outputlen = 0
     local last = sub(input, 1, 2)
-    result[n] = basedictdecompress[last] or dict[last]
+    local firstStr = basedictdecompress[last] or dict[last]
+    if not firstStr then
+        return nil, "could not find last from dict. Invalid input?"
+    end
+    result[n] = firstStr
+    outputlen = outputlen + #firstStr
+    if max_output_size and outputlen > max_output_size then
+        return nil, "decompressed output exceeds limit"
+    end
     n = n+1
     for i = 3, len, 2 do
-        local code = sub(input, i, i+1)
+        local inputCode = sub(input, i, i+1)
         local lastStr = basedictdecompress[last] or dict[last]
         if not lastStr then
             return nil, "could not find last from dict. Invalid input?"
         end
-        local toAdd = basedictdecompress[code] or dict[code]
+        local toAdd = basedictdecompress[inputCode] or dict[inputCode]
         if toAdd then
+            outputlen = outputlen + #toAdd
+            if max_output_size and outputlen > max_output_size then
+                return nil, "decompressed output exceeds limit"
+            end
             result[n] = toAdd
             n = n+1
-            dict, a, b = dictAddB(lastStr..sub(toAdd, 1, 1), dict, a, b)
+            dict, a, b, dictCode = dictBump(dict, a, b)
+            dict[dictCode] = lastStr..sub(toAdd, 1, 1)
         else
             local tmp = lastStr..sub(lastStr, 1, 1)
+            outputlen = outputlen + #tmp
+            if max_output_size and outputlen > max_output_size then
+                return nil, "decompressed output exceeds limit"
+            end
             result[n] = tmp
             n = n+1
-            dict, a, b = dictAddB(tmp, dict, a, b)
+            dict, a, b, dictCode = dictBump(dict, a, b)
+            dict[dictCode] = tmp
         end
-        last = code
+        last = inputCode
     end
     return tconcat(result)
 end
