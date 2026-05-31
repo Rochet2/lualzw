@@ -9,9 +9,9 @@ source = {
 description = {
     summary = "A relatively fast LZW compression algorithm in pure Lua",
     detailed = [[
-Lossless LZW compression for Lua strings with runtime configuration,
-optional size limits for safe network use, and wire format v2 for
-self-describing payloads. Compatible with Lua 5.1 and later.
+Lossless LZW compression for Lua strings with runtime configuration
+(skip list, control prefixes), optional size limits for untrusted input,
+and the original u/c wire format by default. Compatible with Lua 5.1 and later.
     ]],
     homepage = "https://github.com/Rochet2/lualzw",
     license = "MIT",

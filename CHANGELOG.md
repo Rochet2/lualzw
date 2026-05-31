@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bailout returns passthrough when compressed size would not be strictly smaller than input
 - Decompression validates odd-length compressed bodies and unknown first codes
 - `profiling.lua` moved to `benchmark/profiling.lua`
-- README rewritten with API, network, and wire-format documentation
+- README rewritten with full API, configuration, and wire-format documentation
 
 ### Fixed
 
