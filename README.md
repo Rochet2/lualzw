@@ -25,10 +25,10 @@ assert(input == decompressed)
 
 ## Install
 
-Copy [`lualzw.lua`](lualzw.lua) onto your `package.path`, or after the `v1.1.0` tag is published:
+Copy [`lualzw.lua`](lualzw.lua) onto your Lua `package.path`, or clone a tagged release:
 
 ```sh
-luarocks install lualzw
+git clone --branch v1.1.0 --depth 1 https://github.com/Rochet2/lualzw.git
 ```
 
 ## Configuration
