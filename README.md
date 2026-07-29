@@ -23,6 +23,14 @@ local decompressed = assert(lualzw.decompress(compressed))
 assert(input == decompressed)
 ```
 
+## Install
+
+Copy [`lualzw.lua`](lualzw.lua) onto your `package.path`, or after the `v1.1.0` tag is published:
+
+```sh
+luarocks install lualzw
+```
+
 ## Configuration
 
 Create a custom codec with `configure()`. The default module (`require("lualzw")`) uses `skip = {}` and control prefixes `u` / `c`.
@@ -33,7 +41,7 @@ local lualzw = require("lualzw")
 -- Default: original encoding (may embed \0 in dictionary codes)
 local legacy = lualzw.configure({ skip = {} })
 
--- Preferred when compressed data must not contain \0
+-- Preferred for null-free input when compressed codes must avoid \0
 local nullsafe = lualzw.configure({ skip = { [0] = true } })
 ```
 
@@ -45,7 +53,7 @@ The default skip list `{}` matches the original on-the-wire encoding. Dictionary
 - Null-terminated storage or logging
 - Tools that truncate at the first null
 
-Use `{ skip = { [0] = true } }` when compressed output must be binary-safe. Both compressor and decompressor need the same `skip` setting; it is not stored in the payload.
+Use `{ skip = { [0] = true } }` so dictionary codes never use `0` as their **second** byte. For **null-free input**, compressed output then contains no `\0`. If the input itself contains null bytes (or compression falls back to passthrough of such input), `\0` can still appear as the first byte of a base code (`char(0, …)`). Both compressor and decompressor need the same `skip` setting; it is not stored in the payload.
 
 Custom control prefixes (both peers must match):
 
@@ -164,6 +172,8 @@ print(codec.uncompressed, codec.compressed) -- u    c
 **Returns:** compressed string, or `nil, error`.
 
 - Non-string input → `nil, "string expected, got <type>"`
+- Bad limit type → `nil, "number expected for max_input_size, got <type>"`
+- Invalid limit (negative, NaN, infinity) → `nil, "invalid max_input_size"`
 - Input longer than `max_input_size` → `nil, "input exceeds limit"`
 - Input of 0–1 bytes → passthrough (`u` prefix; see wire format)
 - Longer input → LZW compress if strictly smaller than input, otherwise passthrough
@@ -177,6 +187,7 @@ Always pass limits when decoding **untrusted** data (see [Untrusted input](#untr
 
 - Non-string input → `nil, "string expected, got <type>"`
 - Invalid limit types → `nil, "number expected for <name>, got <type>"`
+- Invalid limits (negative, NaN, infinity) → `nil, "invalid <name>"`
 - `#input` or body larger than `max_input_size` → `nil, "compressed input exceeds limit"`
 - Decompressed size exceeds `max_output_size` → `nil, "decompressed output exceeds limit"`
 - Dictionary growth exceeds `max_codes` → `nil, "decompression step limit exceeded"`
@@ -268,12 +279,18 @@ Times are in seconds (average of 10 runs). Random inputs usually bail out to pas
 | Function | Condition | Error |
 | -------- | --------- | ----- |
 | `compress` | Wrong type | `"string expected, got <type>"` |
+| `compress` | Bad limit type | `"number expected for max_input_size, got <type>"` |
+| `compress` | Invalid limit | `"invalid max_input_size"` |
 | `compress` | Input too large | `"input exceeds limit"` |
 | `compress` | Internal | `"algorithm error, could not fetch word"` |
 | `decompress` | Wrong type | `"string expected, got <type>"` |
 | `decompress` | Bad limit type | `"number expected for <name>, got <type>"` |
+| `decompress` | Invalid limit | `"invalid <name>"` |
 | `decompress` | Empty / invalid | `"invalid input - not a compressed string"` |
 | `decompress` | Corrupt codes | `"could not find last from dict. Invalid input?"` |
 | `decompress` | Output limit | `"decompressed output exceeds limit"` |
 | `decompress` | Input limit | `"compressed input exceeds limit"` |
 | `decompress` | Step limit | `"decompression step limit exceeded"` |
+| `configure` | Bad control byte | `"invalid uncompressed control character"` / `"invalid compressed control character"` |
+| `configure` | Matching controls | `"uncompressed and compressed control characters must differ"` |
+| `configure` | Skip too aggressive | `"invalid configuration, no character can be used in compression"` |

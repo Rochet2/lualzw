@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `profiling.lua` no longer assigns globals for compressed/decompressed results
+- Limit validation rejects NaN, infinities, and negatives (`"invalid <name>"`) instead of treating them as disabled or as type errors
+- README documents the real null-skip guarantee (null-free input → null-free codes)
 
 ## [1.0.0] - 2016
 
