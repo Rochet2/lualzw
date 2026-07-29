@@ -11,5 +11,5 @@ globals = {
 
 ignore = {
     "113", -- accessing an undefined global (LibCompress in optional benchmark)
-    "122", -- unused variable in test helpers
+    "122", -- setting a read-only field of a global variable
 }

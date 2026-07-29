@@ -100,6 +100,12 @@ test("compress max_input_size type error", function()
     assert_error(function() return lualzw.compress("abc", "nope") end, "number expected for max_input_size, got string")
 end)
 
+test("compress max_input_size invalid values", function()
+    assert_error(function() return lualzw.compress("abc", -1) end, "invalid max_input_size")
+    assert_error(function() return lualzw.compress("abc", 0 / 0) end, "invalid max_input_size")
+    assert_error(function() return lualzw.compress("abc", math.huge) end, "invalid max_input_size")
+end)
+
 test("incompressible data passthrough", function()
     math.randomseed(1)
     local parts = {}
@@ -210,17 +216,26 @@ test("decompress max_codes type error", function()
     )
 end)
 
--- configuration and wire formats
+test("decompress invalid limit values", function()
+    assert_error(function() return lualzw.decompress("ua", -1) end, "invalid max_output_size")
+    assert_error(function() return lualzw.decompress("ua", 0 / 0) end, "invalid max_output_size")
+    assert_error(function() return lualzw.decompress("ua", nil, -1) end, "invalid max_input_size")
+    assert_error(function() return lualzw.decompress("ua", nil, nil, 0 / 0) end, "invalid max_codes")
+    assert_error(function() return lualzw.decompress("ua", nil, nil, math.huge) end, "invalid max_codes")
+end)
+
+-- configuration
 
 test("invalid skip configuration", function()
     local skip = {}
     for i = 0, 254 do
         skip[i] = true
     end
-    local ok = pcall(function()
+    local ok, err = pcall(function()
         lualzw.configure({skip = skip})
     end)
     assert(not ok)
+    assert(tostring(err):find("invalid configuration, no character can be used in compression", 1, true))
 end)
 
 test("skip list form in configure", function()
@@ -255,6 +270,23 @@ test("null-safe skip configuration roundtrip", function()
     assert(not compressed:find("\0", 1, true))
 end)
 
+test("null-safe codec keeps nulls when input contains nulls", function()
+    local codec = lualzw.configure({skip = {[0] = true}})
+    local input = ("x\0"):rep(200)
+    local compressed = assert(codec.compress(input))
+    assert(codec.decompress(compressed) == input)
+    assert(compressed:find("\0", 1, true))
+end)
+
+test("cross-codec skip mismatch fails to roundtrip", function()
+    local nullsafe = lualzw.configure({skip = {[0] = true}})
+    local legacy = lualzw.configure({skip = {}})
+    local input = ("mismatch"):rep(40)
+    local compressed = assert(nullsafe.compress(input))
+    local out = legacy.decompress(compressed)
+    assert(out ~= input)
+end)
+
 test("custom control characters roundtrip", function()
     local codec = lualzw.configure({uncompressed = "p", compressed = "q"})
     assert(codec.uncompressed == "p")
@@ -267,10 +299,25 @@ test("custom control characters roundtrip", function()
 end)
 
 test("invalid matching control characters", function()
-    local ok = pcall(function()
+    local ok, err = pcall(function()
         lualzw.configure({uncompressed = "x", compressed = "x"})
     end)
     assert(not ok)
+    assert(tostring(err):find("uncompressed and compressed control characters must differ", 1, true))
+end)
+
+test("invalid control character length", function()
+    local ok1, err1 = pcall(function()
+        lualzw.configure({uncompressed = ""})
+    end)
+    assert(not ok1)
+    assert(tostring(err1):find("invalid uncompressed control character", 1, true))
+
+    local ok2, err2 = pcall(function()
+        lualzw.configure({compressed = "ab"})
+    end)
+    assert(not ok2)
+    assert(tostring(err2):find("invalid compressed control character", 1, true))
 end)
 
 test("version export", function()

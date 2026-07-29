@@ -60,8 +60,12 @@ local function validateLimit(name, value)
     if value == nil then
         return true
     end
-    if type(value) ~= "number" or value < 0 then
+    if type(value) ~= "number" then
         return nil, "number expected for " .. name .. ", got " .. type(value)
+    end
+    -- Reject NaN, infinities, and negatives so comparisons cannot silently disable limits.
+    if value ~= value or value == math.huge or value == -math.huge or value < 0 then
+        return nil, "invalid " .. name
     end
     return true
 end
@@ -105,7 +109,6 @@ local function buildState(skippedcharacters)
     end
 
     return {
-        skippedcharacters = skippedcharacters,
         basedictcompress = basedictcompress,
         basedictdecompress = basedictdecompress,
         firstNotSkipped = firstNotSkipped,
